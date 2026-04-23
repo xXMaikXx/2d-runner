@@ -8,8 +8,6 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.physics.world.setBounds(0, 0, 800, 600);
-
     this.isGameOver = false;
     this.score = 0;
     this.gameSpeed = 4;
@@ -18,12 +16,17 @@ class GameScene extends Phaser.Scene {
 
     this.createHtmlUi();
 
+    const gameWidth = this.scale.width;
+    const gameHeight = this.scale.height;
+    const groundHeight = 80;
+    const groundY = gameHeight - groundHeight / 2;
+
     // Boden
-    this.ground = this.add.rectangle(400, 560, 800, 80, 0x444444);
+    this.ground = this.add.rectangle(gameWidth / 2, groundY, gameWidth, groundHeight, 0x444444);
     this.physics.add.existing(this.ground, true);
 
     // Spieler
-    this.player = this.add.rectangle(120, 460, 50, 50, 0x00ff00);
+    this.player = this.add.rectangle(120, gameHeight - groundHeight - 25, 50, 50, 0x00ff00);
     this.physics.add.existing(this.player);
 
     this.player.body.setCollideWorldBounds(true);
@@ -61,18 +64,17 @@ class GameScene extends Phaser.Scene {
       color: '#ffff00'
     });
 
-    this.highscoreTitle = this.add.text(610, 20, 'Top 3', {
+    this.highscoreTitle = this.add.text(gameWidth - 190, 20, 'Top 3', {
       fontSize: '24px',
       color: '#ffffff'
     });
 
-    this.highscoreText = this.add.text(610, 55, '', {
+    this.highscoreText = this.add.text(gameWidth - 190, 55, '', {
       fontSize: '18px',
       color: '#ffffff',
       lineSpacing: 6
     });
 
-    // Game Over Anzeige für Top 10
     this.gameOverTitleText = null;
     this.gameOverRestartText = null;
     this.gameOverScoreText = null;
@@ -80,6 +82,8 @@ class GameScene extends Phaser.Scene {
     this.gameOverTop10Text = null;
 
     this.updateHighscoreDisplay();
+
+    this.scale.on('resize', this.handleResize, this);
   }
 
   update(time, delta) {
@@ -90,11 +94,9 @@ class GameScene extends Phaser.Scene {
 
     if (this.isGameOver) return;
 
-    // Score
     this.score += delta * 0.01;
     this.scoreText.setText('Score: ' + Math.floor(this.score));
 
-    // Schwierigkeit erhöhen
     this.gameSpeed += 0.002;
     this.spawnDelay -= 0.05;
 
@@ -104,7 +106,6 @@ class GameScene extends Phaser.Scene {
 
     this.spawnEvent.delay = this.spawnDelay;
 
-    // Springen
     if (
       Phaser.Input.Keyboard.JustDown(this.spaceKey) &&
       this.player.body.blocked.down
@@ -112,7 +113,6 @@ class GameScene extends Phaser.Scene {
       this.player.body.setVelocityY(-450);
     }
 
-    // Hindernisse bewegen
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obstacle = this.obstacles[i];
 
@@ -129,7 +129,10 @@ class GameScene extends Phaser.Scene {
   spawnObstacle() {
     if (this.isGameOver) return;
 
-    const obstacle = this.add.rectangle(830, 500, 40, 60, 0xff0000);
+    const gameWidth = this.scale.width;
+    const gameHeight = this.scale.height;
+    const obstacle = this.add.rectangle(gameWidth + 30, gameHeight - 100, 40, 60, 0xff0000);
+
     this.physics.add.existing(obstacle);
 
     obstacle.body.setAllowGravity(false);
@@ -146,35 +149,54 @@ class GameScene extends Phaser.Scene {
     this.isGameOver = true;
     this.player.body.setVelocity(0, 0);
 
-    this.gameOverTitleText = this.add.text(220, 120, 'GAME OVER', {
+    const gameWidth = this.scale.width;
+
+    this.gameOverTitleText = this.add.text(gameWidth / 2 - 180, 120, 'GAME OVER', {
       fontSize: '48px',
       color: '#ff0000'
     });
 
-    this.gameOverRestartText = this.add.text(200, 180, 'Drücke R zum Neustarten', {
+    this.gameOverRestartText = this.add.text(gameWidth / 2 - 200, 180, 'Drücke R zum Neustarten', {
       fontSize: '20px',
       color: '#ffffff'
     });
 
-    this.gameOverScoreText = this.add.text(240, 220, 'Dein Score: ' + Math.floor(this.score), {
+    this.gameOverScoreText = this.add.text(gameWidth / 2 - 160, 220, 'Dein Score: ' + Math.floor(this.score), {
       fontSize: '24px',
       color: '#ffffff'
     });
 
     const top10Lines = this.getTop10Lines();
 
-    this.gameOverTop10Title = this.add.text(230, 280, 'Top 10 Highscores', {
+    this.gameOverTop10Title = this.add.text(gameWidth / 2 - 170, 280, 'Top 10 Highscores', {
       fontSize: '28px',
       color: '#ffff00'
     });
 
-    this.gameOverTop10Text = this.add.text(230, 325, top10Lines, {
+    this.gameOverTop10Text = this.add.text(gameWidth / 2 - 170, 325, top10Lines, {
       fontSize: '20px',
       color: '#ffffff',
       lineSpacing: 8
     });
 
     this.showSaveUi();
+  }
+
+  handleResize(gameSize) {
+    const width = gameSize.width;
+    const height = gameSize.height;
+    const groundHeight = 80;
+    const groundY = height - groundHeight / 2;
+
+    this.ground.setPosition(width / 2, groundY);
+    this.ground.width = width;
+    this.ground.height = groundHeight;
+    this.ground.body.updateFromGameObject();
+
+    this.scoreText.setPosition(20, 20);
+    this.bestScoreText.setPosition(20, 55);
+    this.highscoreTitle.setPosition(width - 190, 20);
+    this.highscoreText.setPosition(width - 190, 55);
   }
 
   createHtmlUi() {
@@ -189,7 +211,7 @@ class GameScene extends Phaser.Scene {
     this.messageBox = document.createElement('div');
 
     const commonStyle = {
-      position: 'absolute',
+      position: 'fixed',
       left: '20px',
       zIndex: '1000',
       padding: '8px',
@@ -197,21 +219,21 @@ class GameScene extends Phaser.Scene {
     };
 
     Object.assign(this.nameInput.style, commonStyle, {
-      top: '620px',
+      bottom: '60px',
       width: '180px',
       display: 'none'
     });
 
     Object.assign(this.saveButton.style, commonStyle, {
-      top: '620px',
+      bottom: '60px',
       left: '220px',
       cursor: 'pointer',
       display: 'none'
     });
 
     Object.assign(this.messageBox.style, {
-      position: 'absolute',
-      top: '660px',
+      position: 'fixed',
+      bottom: '20px',
       left: '20px',
       color: 'white',
       fontSize: '16px',
@@ -328,9 +350,13 @@ class GameScene extends Phaser.Scene {
 const config = {
   type: Phaser.AUTO,
   parent: 'app',
-  width: 800,
-  height: 600,
+  width: window.innerWidth,
+  height: window.innerHeight,
   backgroundColor: '#000000',
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
   physics: {
     default: 'arcade',
     arcade: {
