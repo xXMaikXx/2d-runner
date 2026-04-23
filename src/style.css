@@ -1,0 +1,11 @@
+html, body, #app {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #111;
+  color: white;
+  font-family: Arial, sans-serif;
+  overflow-x: hidden;
+}
