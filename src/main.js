@@ -19,15 +19,19 @@ class GameScene extends Phaser.Scene {
     this.playerName = '';
     this.isEnteringName = false;
 
+    this.playerWidth = 50;
+    this.playerNormalHeight = 50;
+    this.playerDuckHeight = 25;
+    this.isDucking = false;
+    this.moveSpeed = 260;
+
     const gameWidth = this.scale.width;
     const gameHeight = this.scale.height;
 
-    // Boden
     this.ground = this.add.rectangle(gameWidth / 2, gameHeight - 40, gameWidth, 80, 0x444444);
     this.physics.add.existing(this.ground, true);
 
-    // Spieler
-    this.player = this.add.rectangle(120, gameHeight - 120, 50, 50, 0x00ff00);
+    this.player = this.add.rectangle(120, gameHeight - 120, this.playerWidth, this.playerNormalHeight, 0x00ff00);
     this.physics.add.existing(this.player);
 
     this.player.body.setGravityY(800);
@@ -35,11 +39,13 @@ class GameScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.ground);
 
-    // Input
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.wKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+    this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
+    this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
-    // Hindernisse
     this.obstacles = [];
 
     this.spawnEvent = this.time.addEvent({
@@ -49,29 +55,22 @@ class GameScene extends Phaser.Scene {
       loop: true
     });
 
-    // UI
-    this.scoreText = this.add.text(20, 20, 'Score: 0', { fontSize: '24px' });
+    this.scoreText = this.add.text(20, 20, 'Score: 0', {
+      fontSize: '24px',
+      color: '#ffffff'
+    });
 
-    this.highscoreText = this.add.text(gameWidth - 200, 20, '', {
-      fontSize: '18px'
+    this.controlsText = this.add.text(20, 55, 'W/Space = Springen | A/D = Bewegen | S = Ducken', {
+      fontSize: '16px',
+      color: '#ffffff'
+    });
+
+    this.highscoreText = this.add.text(gameWidth - 220, 20, '', {
+      fontSize: '18px',
+      color: '#ffffff'
     });
 
     this.updateHighscoreDisplay();
-
-    // Tastatur für Name
-    this.input.keyboard.on('keydown', (event) => {
-      if (!this.isEnteringName) return;
-
-      if (event.key === 'Backspace') {
-        this.playerName = this.playerName.slice(0, -1);
-      } else if (event.key === 'Enter') {
-        this.saveHighscore();
-      } else if (event.key.length === 1 && this.playerName.length < 10) {
-        this.playerName += event.key;
-      }
-
-      this.nameText.setText(this.playerName);
-    });
   }
 
   update(time, delta) {
@@ -91,18 +90,75 @@ class GameScene extends Phaser.Scene {
 
     this.gameSpeed += 0.002;
 
-    if (
-      Phaser.Input.Keyboard.JustDown(this.spaceKey) &&
-      this.jumpCount < this.maxJumps
-    ) {
-      this.player.body.setVelocityY(this.jumpCount === 0 ? -450 : -350);
-      this.jumpCount++;
-    }
+    this.handlePlayerMovement();
+    this.handlePlayerDuck();
+    this.handlePlayerJump();
 
-    for (let obstacle of this.obstacles) {
+    for (let i = this.obstacles.length - 1; i >= 0; i--) {
+      const obstacle = this.obstacles[i];
+
       obstacle.x -= this.gameSpeed;
       obstacle.body.updateFromGameObject();
+
+      if (obstacle.x < -80) {
+        obstacle.destroy();
+        this.obstacles.splice(i, 1);
+      }
     }
+  }
+
+  handlePlayerMovement() {
+    if (this.aKey.isDown) {
+      this.player.body.setVelocityX(-this.moveSpeed);
+    } else if (this.dKey.isDown) {
+      this.player.body.setVelocityX(this.moveSpeed);
+    } else {
+      this.player.body.setVelocityX(0);
+    }
+  }
+
+  handlePlayerJump() {
+    const jumpPressed =
+      Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
+      Phaser.Input.Keyboard.JustDown(this.wKey);
+
+    if (jumpPressed && this.jumpCount < this.maxJumps) {
+      if (this.isDucking) {
+        this.setPlayerDuck(false);
+      }
+
+      const jumpPower = this.jumpCount === 0 ? -450 : -350;
+      this.player.body.setVelocityY(jumpPower);
+      this.jumpCount++;
+    }
+  }
+
+  handlePlayerDuck() {
+    const shouldDuck = this.sKey.isDown && this.player.body.blocked.down;
+
+    if (shouldDuck && !this.isDucking) {
+      this.setPlayerDuck(true);
+    }
+
+    if (!shouldDuck && this.isDucking) {
+      this.setPlayerDuck(false);
+    }
+  }
+
+  setPlayerDuck(duck) {
+    const gameHeight = this.scale.height;
+    const groundTop = gameHeight - 80;
+
+    this.isDucking = duck;
+
+    const newHeight = duck ? this.playerDuckHeight : this.playerNormalHeight;
+
+    this.player.height = newHeight;
+    this.player.setDisplaySize(this.playerWidth, newHeight);
+    this.player.body.setSize(this.playerWidth, newHeight, true);
+
+    this.player.y = groundTop - newHeight / 2;
+    this.player.body.updateFromGameObject();
   }
 
   spawnObstacle() {
@@ -113,12 +169,15 @@ class GameScene extends Phaser.Scene {
 
     const isBig = Phaser.Math.Between(0, 1);
 
-    let height = isBig ? 120 : 60;
-    let y = isBig ? gameHeight - 160 : gameHeight - 100;
+    const height = isBig ? 120 : 60;
+    const y = isBig ? gameHeight - 160 : gameHeight - 100;
+    const color = isBig ? 0xff0000 : 0x00ffff;
 
-    const obstacle = this.add.rectangle(gameWidth + 30, y, 40, height, 0xff0000);
+    const obstacle = this.add.rectangle(gameWidth + 30, y, 40, height, color);
     this.physics.add.existing(obstacle);
+
     obstacle.body.setAllowGravity(false);
+    obstacle.body.setImmovable(true);
 
     this.obstacles.push(obstacle);
 
@@ -126,7 +185,10 @@ class GameScene extends Phaser.Scene {
   }
 
   gameOver() {
+    if (this.isGameOver) return;
+
     this.isGameOver = true;
+    this.player.body.setVelocity(0, 0);
 
     const gameWidth = this.scale.width;
 
@@ -136,7 +198,8 @@ class GameScene extends Phaser.Scene {
     });
 
     this.add.text(gameWidth / 2 - 120, 180, 'Name eingeben:', {
-      fontSize: '24px'
+      fontSize: '24px',
+      color: '#ffffff'
     });
 
     this.nameText = this.add.text(gameWidth / 2 - 120, 220, '', {
@@ -144,7 +207,26 @@ class GameScene extends Phaser.Scene {
       color: '#ffff00'
     });
 
+    this.add.text(gameWidth / 2 - 120, 260, 'ENTER = speichern | R = Neustart', {
+      fontSize: '18px',
+      color: '#ffffff'
+    });
+
     this.isEnteringName = true;
+
+    this.input.keyboard.on('keydown', (event) => {
+      if (!this.isEnteringName) return;
+
+      if (event.key === 'Backspace') {
+        this.playerName = this.playerName.slice(0, -1);
+      } else if (event.key === 'Enter') {
+        this.saveHighscore();
+      } else if (event.key.length === 1 && this.playerName.length < 10) {
+        this.playerName += event.key;
+      }
+
+      this.nameText.setText(this.playerName);
+    });
   }
 
   saveHighscore() {
@@ -160,11 +242,11 @@ class GameScene extends Phaser.Scene {
     localStorage.setItem('scores', JSON.stringify(scores));
 
     this.isEnteringName = false;
-
     this.updateHighscoreDisplay();
 
-    this.add.text(200, 300, 'Gespeichert! Drücke R', {
-      fontSize: '24px'
+    this.add.text(this.scale.width / 2 - 120, 310, 'Gespeichert! Drücke R', {
+      fontSize: '24px',
+      color: '#00ff00'
     });
   }
 
@@ -172,15 +254,16 @@ class GameScene extends Phaser.Scene {
     let scores = JSON.parse(localStorage.getItem('scores')) || [];
 
     if (scores.length === 0) {
-      this.highscoreText.setText('Keine Scores');
+      this.highscoreText.setText('Top 3\nKeine Scores');
       return;
     }
 
-    const top3 = scores.slice(0, 3)
+    const top3 = scores
+      .slice(0, 3)
       .map((s, i) => `${i + 1}. ${s.name} - ${s.score}`)
       .join('\n');
 
-    this.highscoreText.setText(top3);
+    this.highscoreText.setText('Top 3\n' + top3);
   }
 }
 
