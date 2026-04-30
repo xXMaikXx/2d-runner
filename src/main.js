@@ -14,7 +14,7 @@ class GameScene extends Phaser.Scene {
     this.spawnDelay = 1500;
     this.hasSavedScore = false;
 
-    // 👉 NEU: Double Jump Variablen
+    // 👉 Double Jump Variablen
     this.jumpCount = 0;
     this.maxJumps = 2;
 
@@ -36,10 +36,8 @@ class GameScene extends Phaser.Scene {
     this.player.body.setCollideWorldBounds(true);
     this.player.body.setGravityY(800);
 
-    // 👉 GEÄNDERT: Reset Jump beim Landen
-    this.physics.add.collider(this.player, this.ground, () => {
-      this.jumpCount = 0;
-    });
+    // 👉 WICHTIG: ohne Callback!
+    this.physics.add.collider(this.player, this.ground);
 
     // Tasten
     this.spaceKey = this.input.keyboard.addKey(
@@ -60,7 +58,7 @@ class GameScene extends Phaser.Scene {
       loop: true
     });
 
-    // Laufende Anzeige
+    // UI
     this.scoreText = this.add.text(20, 20, 'Score: 0', {
       fontSize: '24px',
       color: '#ffffff'
@@ -82,12 +80,6 @@ class GameScene extends Phaser.Scene {
       lineSpacing: 6
     });
 
-    this.gameOverTitleText = null;
-    this.gameOverRestartText = null;
-    this.gameOverScoreText = null;
-    this.gameOverTop10Title = null;
-    this.gameOverTop10Text = null;
-
     this.updateHighscoreDisplay();
 
     this.scale.on('resize', this.handleResize, this);
@@ -101,6 +93,11 @@ class GameScene extends Phaser.Scene {
 
     if (this.isGameOver) return;
 
+    // 👉 FIX: Jump Reset nur wenn wirklich am Boden
+    if (this.player.body.blocked.down) {
+      this.jumpCount = 0;
+    }
+
     this.score += delta * 0.01;
     this.scoreText.setText('Score: ' + Math.floor(this.score));
 
@@ -113,7 +110,7 @@ class GameScene extends Phaser.Scene {
 
     this.spawnEvent.delay = this.spawnDelay;
 
-    // 👉 GEÄNDERT: Double Jump Logik
+    // 👉 Double Jump
     if (
       Phaser.Input.Keyboard.JustDown(this.spaceKey) &&
       this.jumpCount < this.maxJumps
@@ -161,32 +158,19 @@ class GameScene extends Phaser.Scene {
 
     const gameWidth = this.scale.width;
 
-    this.gameOverTitleText = this.add.text(gameWidth / 2 - 180, 120, 'GAME OVER', {
+    this.add.text(gameWidth / 2 - 180, 120, 'GAME OVER', {
       fontSize: '48px',
       color: '#ff0000'
     });
 
-    this.gameOverRestartText = this.add.text(gameWidth / 2 - 200, 180, 'Drücke R zum Neustarten', {
+    this.add.text(gameWidth / 2 - 200, 180, 'Drücke R zum Neustarten', {
       fontSize: '20px',
       color: '#ffffff'
     });
 
-    this.gameOverScoreText = this.add.text(gameWidth / 2 - 160, 220, 'Dein Score: ' + Math.floor(this.score), {
+    this.add.text(gameWidth / 2 - 160, 220, 'Dein Score: ' + Math.floor(this.score), {
       fontSize: '24px',
       color: '#ffffff'
-    });
-
-    const top10Lines = this.getTop10Lines();
-
-    this.gameOverTop10Title = this.add.text(gameWidth / 2 - 170, 280, 'Top 10 Highscores', {
-      fontSize: '28px',
-      color: '#ffff00'
-    });
-
-    this.gameOverTop10Text = this.add.text(gameWidth / 2 - 170, 325, top10Lines, {
-      fontSize: '20px',
-      color: '#ffffff',
-      lineSpacing: 8
     });
 
     this.showSaveUi();
@@ -209,14 +193,13 @@ class GameScene extends Phaser.Scene {
     this.highscoreText.setPosition(width - 190, 55);
   }
 
-  // (Rest deines Codes bleibt UNVERÄNDERT)
-  createHtmlUi() { /* ... bleibt gleich ... */ }
-  showSaveUi() { /* ... bleibt gleich ... */ }
-  hideSaveUi() { /* ... bleibt gleich ... */ }
-  saveHighscore() { /* ... bleibt gleich ... */ }
-  getHighscores() { /* ... bleibt gleich ... */ }
-  updateHighscoreDisplay() { /* ... bleibt gleich ... */ }
-  getTop10Lines() { /* ... bleibt gleich ... */ }
+  createHtmlUi() { /* unverändert */ }
+  showSaveUi() { /* unverändert */ }
+  hideSaveUi() { /* unverändert */ }
+  saveHighscore() { /* unverändert */ }
+  getHighscores() { /* unverändert */ }
+  updateHighscoreDisplay() { /* unverändert */ }
+  getTop10Lines() { /* unverändert */ }
 }
 
 const config = {
