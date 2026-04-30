@@ -12,32 +12,30 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.gameSpeed = 4;
     this.spawnDelay = 1500;
-    this.hasSavedScore = false;
 
     this.jumpCount = 0;
     this.maxJumps = 2;
 
-    this.createHtmlUi();
+    this.playerName = '';
+    this.isEnteringName = false;
 
     const gameWidth = this.scale.width;
     const gameHeight = this.scale.height;
-    const groundHeight = 80;
-    const groundY = gameHeight - groundHeight / 2;
 
     // Boden
-    this.ground = this.add.rectangle(gameWidth / 2, groundY, gameWidth, groundHeight, 0x444444);
+    this.ground = this.add.rectangle(gameWidth / 2, gameHeight - 40, gameWidth, 80, 0x444444);
     this.physics.add.existing(this.ground, true);
 
     // Spieler
-    this.player = this.add.rectangle(120, gameHeight - groundHeight - 25, 50, 50, 0x00ff00);
+    this.player = this.add.rectangle(120, gameHeight - 120, 50, 50, 0x00ff00);
     this.physics.add.existing(this.player);
 
-    this.player.body.setCollideWorldBounds(true);
     this.player.body.setGravityY(800);
+    this.player.body.setCollideWorldBounds(true);
 
     this.physics.add.collider(this.player, this.ground);
 
-    // Tasten
+    // Input
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
@@ -51,41 +49,39 @@ class GameScene extends Phaser.Scene {
       loop: true
     });
 
-    this.scoreText = this.add.text(20, 20, 'Score: 0', {
-      fontSize: '24px',
-      color: '#ffffff'
-    });
+    // UI
+    this.scoreText = this.add.text(20, 20, 'Score: 0', { fontSize: '24px' });
 
-    this.bestScoreText = this.add.text(20, 55, 'Bester Score: 0', {
-      fontSize: '20px',
-      color: '#ffff00'
-    });
-
-    this.highscoreTitle = this.add.text(gameWidth - 190, 20, 'Top 3', {
-      fontSize: '24px',
-      color: '#ffffff'
-    });
-
-    this.highscoreText = this.add.text(gameWidth - 190, 55, '', {
-      fontSize: '18px',
-      color: '#ffffff',
-      lineSpacing: 6
+    this.highscoreText = this.add.text(gameWidth - 200, 20, '', {
+      fontSize: '18px'
     });
 
     this.updateHighscoreDisplay();
 
-    this.scale.on('resize', this.handleResize, this);
+    // Tastatur für Name
+    this.input.keyboard.on('keydown', (event) => {
+      if (!this.isEnteringName) return;
+
+      if (event.key === 'Backspace') {
+        this.playerName = this.playerName.slice(0, -1);
+      } else if (event.key === 'Enter') {
+        this.saveHighscore();
+      } else if (event.key.length === 1 && this.playerName.length < 10) {
+        this.playerName += event.key;
+      }
+
+      this.nameText.setText(this.playerName);
+    });
   }
 
   update(time, delta) {
-    if (this.isGameOver && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-      this.hideSaveUi();
-      this.scene.restart();
+    if (this.isGameOver) {
+      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+        this.scene.restart();
+      }
+      return;
     }
 
-    if (this.isGameOver) return;
-
-    // Jump Reset
     if (this.player.body.blocked.down) {
       this.jumpCount = 0;
     }
@@ -94,69 +90,35 @@ class GameScene extends Phaser.Scene {
     this.scoreText.setText('Score: ' + Math.floor(this.score));
 
     this.gameSpeed += 0.002;
-    this.spawnDelay -= 0.05;
 
-    if (this.spawnDelay < 600) {
-      this.spawnDelay = 600;
-    }
-
-    this.spawnEvent.delay = this.spawnDelay;
-
-    // Double Jump
     if (
       Phaser.Input.Keyboard.JustDown(this.spaceKey) &&
       this.jumpCount < this.maxJumps
     ) {
-      const jumpPower = this.jumpCount === 0 ? -450 : -350;
-      this.player.body.setVelocityY(jumpPower);
+      this.player.body.setVelocityY(this.jumpCount === 0 ? -450 : -350);
       this.jumpCount++;
     }
 
-    // Hindernisse bewegen
-    for (let i = this.obstacles.length - 1; i >= 0; i--) {
-      const obstacle = this.obstacles[i];
-
+    for (let obstacle of this.obstacles) {
       obstacle.x -= this.gameSpeed;
       obstacle.body.updateFromGameObject();
-
-      if (obstacle.x < -50) {
-        obstacle.destroy();
-        this.obstacles.splice(i, 1);
-      }
     }
   }
 
-  // 🚀 NEU: verschiedene Hindernisse
   spawnObstacle() {
     if (this.isGameOver) return;
 
     const gameWidth = this.scale.width;
     const gameHeight = this.scale.height;
 
-    const type = Phaser.Math.Between(0, 1);
+    const isBig = Phaser.Math.Between(0, 1);
 
-    let height;
-    let y;
-    let color;
+    let height = isBig ? 120 : 60;
+    let y = isBig ? gameHeight - 160 : gameHeight - 100;
 
-    if (type === 0) {
-      // kleines Hindernis
-      height = 60;
-      y = gameHeight - 100;
-      color = 0x00ffff;
-    } else {
-      // grosses Hindernis
-      height = 120;
-      y = gameHeight - 160;
-      color = 0xff0000;
-    }
-
-    const obstacle = this.add.rectangle(gameWidth + 30, y, 40, height, color);
-
+    const obstacle = this.add.rectangle(gameWidth + 30, y, 40, height, 0xff0000);
     this.physics.add.existing(obstacle);
-
     obstacle.body.setAllowGravity(false);
-    obstacle.body.setImmovable(true);
 
     this.obstacles.push(obstacle);
 
@@ -164,55 +126,62 @@ class GameScene extends Phaser.Scene {
   }
 
   gameOver() {
-    if (this.isGameOver) return;
-
     this.isGameOver = true;
-    this.player.body.setVelocity(0, 0);
 
     const gameWidth = this.scale.width;
 
-    this.add.text(gameWidth / 2 - 180, 120, 'GAME OVER', {
+    this.add.text(gameWidth / 2 - 150, 100, 'GAME OVER', {
       fontSize: '48px',
       color: '#ff0000'
     });
 
-    this.add.text(gameWidth / 2 - 200, 180, 'Drücke R zum Neustarten', {
-      fontSize: '20px',
-      color: '#ffffff'
+    this.add.text(gameWidth / 2 - 120, 180, 'Name eingeben:', {
+      fontSize: '24px'
     });
 
-    this.add.text(gameWidth / 2 - 160, 220, 'Dein Score: ' + Math.floor(this.score), {
-      fontSize: '24px',
-      color: '#ffffff'
+    this.nameText = this.add.text(gameWidth / 2 - 120, 220, '', {
+      fontSize: '28px',
+      color: '#ffff00'
     });
 
-    this.showSaveUi();
+    this.isEnteringName = true;
   }
 
-  handleResize(gameSize) {
-    const width = gameSize.width;
-    const height = gameSize.height;
-    const groundHeight = 80;
-    const groundY = height - groundHeight / 2;
+  saveHighscore() {
+    const name = this.playerName || 'Spieler';
+    const score = Math.floor(this.score);
 
-    this.ground.setPosition(width / 2, groundY);
-    this.ground.width = width;
-    this.ground.height = groundHeight;
-    this.ground.body.updateFromGameObject();
+    let scores = JSON.parse(localStorage.getItem('scores')) || [];
 
-    this.scoreText.setPosition(20, 20);
-    this.bestScoreText.setPosition(20, 55);
-    this.highscoreTitle.setPosition(width - 190, 20);
-    this.highscoreText.setPosition(width - 190, 55);
+    scores.push({ name, score });
+    scores.sort((a, b) => b.score - a.score);
+    scores = scores.slice(0, 10);
+
+    localStorage.setItem('scores', JSON.stringify(scores));
+
+    this.isEnteringName = false;
+
+    this.updateHighscoreDisplay();
+
+    this.add.text(200, 300, 'Gespeichert! Drücke R', {
+      fontSize: '24px'
+    });
   }
 
-  createHtmlUi() {}
-  showSaveUi() {}
-  hideSaveUi() {}
-  saveHighscore() {}
-  getHighscores() {}
-  updateHighscoreDisplay() {}
-  getTop10Lines() {}
+  updateHighscoreDisplay() {
+    let scores = JSON.parse(localStorage.getItem('scores')) || [];
+
+    if (scores.length === 0) {
+      this.highscoreText.setText('Keine Scores');
+      return;
+    }
+
+    const top3 = scores.slice(0, 3)
+      .map((s, i) => `${i + 1}. ${s.name} - ${s.score}`)
+      .join('\n');
+
+    this.highscoreText.setText(top3);
+  }
 }
 
 const config = {
@@ -222,14 +191,10 @@ const config = {
   height: window.innerHeight,
   backgroundColor: '#000000',
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH
+    mode: Phaser.Scale.RESIZE
   },
   physics: {
-    default: 'arcade',
-    arcade: {
-      debug: false
-    }
+    default: 'arcade'
   },
   scene: [GameScene]
 };
