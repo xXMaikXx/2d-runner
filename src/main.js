@@ -10,14 +10,15 @@ class GameScene extends Phaser.Scene {
   create() {
     this.isGameOver = false;
     this.score = 0;
-    this.gameSpeed = 4;
-    this.spawnDelay = 1500;
+    this.gameSpeed = 3;
+    this.speedIncrease = 0.0005;
 
     this.jumpCount = 0;
     this.maxJumps = 2;
 
     this.playerName = '';
     this.isEnteringName = false;
+    this.scoreSaved = false;
 
     this.playerWidth = 50;
     this.playerNormalHeight = 50;
@@ -39,18 +40,28 @@ class GameScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.ground);
 
-    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.wKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-    this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-    this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+    this.keys = this.input.keyboard.addKeys({
+      space: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      w: Phaser.Input.Keyboard.KeyCodes.W,
+      a: Phaser.Input.Keyboard.KeyCodes.A,
+      s: Phaser.Input.Keyboard.KeyCodes.S,
+      d: Phaser.Input.Keyboard.KeyCodes.D,
+      r: Phaser.Input.Keyboard.KeyCodes.R
+    });
 
     this.obstacles = [];
+    this.coins = [];
 
-    this.spawnEvent = this.time.addEvent({
-      delay: this.spawnDelay,
+    this.time.addEvent({
+      delay: 1500,
       callback: this.spawnObstacle,
+      callbackScope: this,
+      loop: true
+    });
+
+    this.time.addEvent({
+      delay: 2500,
+      callback: this.spawnCoinRandom,
       callbackScope: this,
       loop: true
     });
@@ -71,11 +82,27 @@ class GameScene extends Phaser.Scene {
     });
 
     this.updateHighscoreDisplay();
+
+    this.input.keyboard.on('keydown', (event) => {
+      if (!this.isEnteringName) return;
+
+      if (event.key === 'Backspace') {
+        this.playerName = this.playerName.slice(0, -1);
+      } else if (event.key === 'Enter') {
+        this.saveHighscore();
+      } else if (event.key.length === 1 && this.playerName.length < 10) {
+        this.playerName += event.key;
+      }
+
+      if (this.nameText) {
+        this.nameText.setText(this.playerName);
+      }
+    });
   }
 
   update(time, delta) {
     if (this.isGameOver) {
-      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
         this.scene.restart();
       }
       return;
@@ -88,11 +115,11 @@ class GameScene extends Phaser.Scene {
     this.score += delta * 0.01;
     this.scoreText.setText('Score: ' + Math.floor(this.score));
 
-    this.gameSpeed += 0.002;
+    this.gameSpeed += this.speedIncrease;
 
-    this.handlePlayerMovement();
-    this.handlePlayerDuck();
-    this.handlePlayerJump();
+    this.handleMovement();
+    this.handleDuck();
+    this.handleJump();
 
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obstacle = this.obstacles[i];
@@ -105,26 +132,42 @@ class GameScene extends Phaser.Scene {
         this.obstacles.splice(i, 1);
       }
     }
+
+    for (let i = this.coins.length - 1; i >= 0; i--) {
+      const coin = this.coins[i];
+
+      coin.x -= this.gameSpeed;
+      coin.body.updateFromGameObject();
+
+      if (this.physics.overlap(this.player, coin)) {
+        this.collectCoin(coin, i);
+      }
+
+      if (coin.x < -80) {
+        coin.destroy();
+        this.coins.splice(i, 1);
+      }
+    }
   }
 
-  handlePlayerMovement() {
-    if (this.aKey.isDown) {
+  handleMovement() {
+    if (this.keys.a.isDown) {
       this.player.body.setVelocityX(-this.moveSpeed);
-    } else if (this.dKey.isDown) {
+    } else if (this.keys.d.isDown) {
       this.player.body.setVelocityX(this.moveSpeed);
     } else {
       this.player.body.setVelocityX(0);
     }
   }
 
-  handlePlayerJump() {
+  handleJump() {
     const jumpPressed =
-      Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
-      Phaser.Input.Keyboard.JustDown(this.wKey);
+      Phaser.Input.Keyboard.JustDown(this.keys.space) ||
+      Phaser.Input.Keyboard.JustDown(this.keys.w);
 
     if (jumpPressed && this.jumpCount < this.maxJumps) {
       if (this.isDucking) {
-        this.setPlayerDuck(false);
+        this.setDuck(false);
       }
 
       const jumpPower = this.jumpCount === 0 ? -450 : -350;
@@ -133,19 +176,19 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  handlePlayerDuck() {
-    const shouldDuck = this.sKey.isDown && this.player.body.blocked.down;
+  handleDuck() {
+    const shouldDuck = this.keys.s.isDown && this.player.body.blocked.down;
 
     if (shouldDuck && !this.isDucking) {
-      this.setPlayerDuck(true);
+      this.setDuck(true);
     }
 
     if (!shouldDuck && this.isDucking) {
-      this.setPlayerDuck(false);
+      this.setDuck(false);
     }
   }
 
-  setPlayerDuck(duck) {
+  setDuck(duck) {
     const gameHeight = this.scale.height;
     const groundTop = gameHeight - 80;
 
@@ -153,10 +196,8 @@ class GameScene extends Phaser.Scene {
 
     const newHeight = duck ? this.playerDuckHeight : this.playerNormalHeight;
 
-    this.player.height = newHeight;
     this.player.setDisplaySize(this.playerWidth, newHeight);
     this.player.body.setSize(this.playerWidth, newHeight, true);
-
     this.player.y = groundTop - newHeight / 2;
     this.player.body.updateFromGameObject();
   }
@@ -169,8 +210,8 @@ class GameScene extends Phaser.Scene {
 
     const isBig = Phaser.Math.Between(0, 1);
 
-    const height = isBig ? 120 : 60;
-    const y = isBig ? gameHeight - 160 : gameHeight - 100;
+    const height = isBig ? 90 : 60;
+    const y = isBig ? gameHeight - 140 : gameHeight - 100;
     const color = isBig ? 0xff0000 : 0x00ffff;
 
     const obstacle = this.add.rectangle(gameWidth + 30, y, 40, height, color);
@@ -182,6 +223,39 @@ class GameScene extends Phaser.Scene {
     this.obstacles.push(obstacle);
 
     this.physics.add.collider(this.player, obstacle, this.gameOver, null, this);
+
+    if (Phaser.Math.Between(0, 1)) {
+      this.spawnCoin(gameWidth + 30, y - height / 2 - 45);
+    }
+  }
+
+  spawnCoin(x, y) {
+    const coin = this.add.circle(x, y, 12, 0xffff00);
+    this.physics.add.existing(coin);
+
+    coin.body.setAllowGravity(false);
+    coin.body.setCircle(12);
+
+    this.coins.push(coin);
+  }
+
+  spawnCoinRandom() {
+    if (this.isGameOver) return;
+
+    const gameWidth = this.scale.width;
+    const gameHeight = this.scale.height;
+
+    const y = Phaser.Math.Between(gameHeight - 260, gameHeight - 180);
+
+    this.spawnCoin(gameWidth + 30, y);
+  }
+
+  collectCoin(coin, index) {
+    coin.destroy();
+    this.coins.splice(index, 1);
+
+    this.score += 50;
+    this.scoreText.setText('Score: ' + Math.floor(this.score));
   }
 
   gameOver() {
@@ -213,23 +287,11 @@ class GameScene extends Phaser.Scene {
     });
 
     this.isEnteringName = true;
-
-    this.input.keyboard.on('keydown', (event) => {
-      if (!this.isEnteringName) return;
-
-      if (event.key === 'Backspace') {
-        this.playerName = this.playerName.slice(0, -1);
-      } else if (event.key === 'Enter') {
-        this.saveHighscore();
-      } else if (event.key.length === 1 && this.playerName.length < 10) {
-        this.playerName += event.key;
-      }
-
-      this.nameText.setText(this.playerName);
-    });
   }
 
   saveHighscore() {
+    if (this.scoreSaved) return;
+
     const name = this.playerName || 'Spieler';
     const score = Math.floor(this.score);
 
@@ -241,7 +303,9 @@ class GameScene extends Phaser.Scene {
 
     localStorage.setItem('scores', JSON.stringify(scores));
 
+    this.scoreSaved = true;
     this.isEnteringName = false;
+
     this.updateHighscoreDisplay();
 
     this.add.text(this.scale.width / 2 - 120, 310, 'Gespeichert! Drücke R', {
@@ -251,7 +315,7 @@ class GameScene extends Phaser.Scene {
   }
 
   updateHighscoreDisplay() {
-    let scores = JSON.parse(localStorage.getItem('scores')) || [];
+    const scores = JSON.parse(localStorage.getItem('scores')) || [];
 
     if (scores.length === 0) {
       this.highscoreText.setText('Top 3\nKeine Scores');
@@ -277,7 +341,10 @@ const config = {
     mode: Phaser.Scale.RESIZE
   },
   physics: {
-    default: 'arcade'
+    default: 'arcade',
+    arcade: {
+      debug: false
+    }
   },
   scene: [GameScene]
 };
